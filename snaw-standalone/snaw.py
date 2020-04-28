@@ -3,6 +3,13 @@ from pyAudioAnalysis import audioSegmentation as aS
 from scipy import interpolate
 from scipy.signal import butter, lfilter, freqz
 from scipy.stats import itemfreq
+from keras.models import load_model
+import keras
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, LSTM, Activation
+from keras.utils import to_categorical
+import wandb
+from wandb.keras import WandbCallback
 import csv
 import yaml
 import sys
@@ -15,64 +22,15 @@ import SimpleITK as sitk
 import os
 import json
 import argparse
+import traceback
 
-# function that runs the classification functions on the selected audio file
-# builds the dictionary of category with associated timestamps
-def classify_file( audiofile, model, model_type, model_color ):
+# Constants
+DEBUG_FLAG = True
+PREDICTION_VERBOSE = False
 
-    # sets duration of audiofile, for getting the timestamps of each classification
-    with contextlib.closing(wave.open(audiofile,'r')) as f:
-        frames = f.getnframes()
-        rate = f.getframerate()
-        duration = frames / float(rate)
-
-    # only used for console output, can be removed to speed up runtime
-    #   function will throw error because of true flag at end,
-    #   console log is still displayed in spite of
-    #try:
-    #    aS.mtFileClassification(audiofile, model,"svm", True)
-    #except TypeError:
-    #    print("TypeError")
-
-    # pulls all the data given from the classification function
-    [flagsInd, classesAll, acc, CM] = aS.mtFileClassification(audiofile, model,"svm")
-
-    flag_len = len(flagsInd) # amount of segments made
-    segment = duration / flag_len # length of each time segment
-
-    # dictionary to be built of timestamps and categories
-    classify_dict = {'name' : model_type,
-                     'color' : model_color,
-                     'data' : []}
-
-    classify_dict['data'].append(  { "category" : "NO",
-                                             "time" : 0 } )
-
-    for index in range(flag_len):
-        timestamp = segment * index + 1 # current timestamp
-
-        # builds dictionary
-        classify_dict['data'].append(  { "category" : classesAll[int(flagsInd[index])],
-                                         "time" : timestamp } )
-        # used for console logging
-        # print( str( "{ category: '" + classesAll[int(flagsInd[index])] ) + "', time: " + str(timestamp) + " }," )
-
-    return classify_dict
-
-def anthro_model():
-    # for filename in os.listdir('model/anthro'):
-    modelfile = 'model/anthro/svmAnthroClassModel'
-    return modelfile
-
-def bio_model():
-   # for filename in os.listdir('model/bio'):
-   modelfile = 'model/bio/svmBioClassModel'
-   return modelfile
-
-def geo_model():
-    #for filename in os.listdir('model/geo'):
-    modelfile = 'model/geo/svmGeoClassModel'
-    return modelfile
+# Removes warning: 
+# WARNING = "I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 class AudioProcessing(object):
 
@@ -280,6 +238,94 @@ class AudioProcessing(object):
         background_noise = actual_bins[np.argmax(new_hist)] + 0.2 * noise_std
 
         return background_noise
+
+# CLassify Files with CNNs
+def classify_file( audio_file, all_models ) :
+
+    all_labels = [ ["AAT", "AHV", "AMA", "ART", "ASI", "AVH", "AVT"],
+                   ["BRA", "BAM", "BBI", "BMA", "BIN"],
+                   ["GOC", "GRA", "GST","GWG", "GWC"] ]
+
+    classify_dict = [ {'name' : 'Anthrophony',
+                     'color' : '#0088FE',
+                     'data' : [] },
+                      {'name': 'Biophony',
+                       'color': '#00C49F',
+                       'data': [] },
+                      {'name': 'Geophony',
+                       'color': '#FFBB28',
+                       'data': [] } ]
+
+    ## Running the models
+
+    n_mfcc = 128 # bucket size !!SUBJECT TO CHANGE!!
+    max_len = 32 # max_len size !!SUBJECT TO CHANGE!!
+    channels = 1 # channels !!SUBJECT TO CHANGE!!
+
+    # convert file to wav2mfcc
+    # Mel-frequency cepstral coefficients
+    file_path = audio_file
+    big_wave, sr = librosa.load(file_path, mono=True, sr=None)
+
+    for sec_index in range( int(big_wave.shape[0] / sr) ) :
+        start_sec = sec_index
+        end_sec = sec_index + 1
+
+        sec_to_trim = np.array( [ float(start_sec), float(end_sec) ] )
+        sec_to_trim = np.ceil( sec_to_trim * sr )
+
+        wave = big_wave[int(sec_to_trim[0]) : int(sec_to_trim[1])]
+
+        wave = np.asfortranarray(wave[::3])
+        mfcc = librosa.feature.mfcc(wave, sr=16000, n_mfcc=n_mfcc)
+
+        # If maximum length exceeds mfcc lengths then pad the remaining ones
+        if (max_len > mfcc.shape[1]):
+            pad_width = max_len - mfcc.shape[1]
+            mfcc = np.pad(mfcc, pad_width=((0, 0), (0, pad_width)), mode='constant')
+
+        # Else cutoff the remaining parts
+        else:
+            mfcc = mfcc[:, :max_len]
+
+        # Convert wav to MFCC
+        #prediction_data = wav2mfcc('./prediction/nature_sc.wav')
+        prediction_data = mfcc
+
+        # Reshape to 4 dimensions
+        prediction_data = prediction_data.reshape(1, n_mfcc, max_len, channels)
+
+        # Run the model on the inputted file
+
+        all_predicted = [ model.predict(prediction_data) for model in all_models ]
+
+        for labels, predicted, classification in zip( all_labels, all_predicted, classify_dict ) :
+            # Output the prediction values for each class
+            if( PREDICTION_VERBOSE ):
+                print ('PREDICTED VALUES')
+            labels_indices = range(len(labels))
+            max_value = 0
+            max_value_index = 0
+            for index in labels_indices:
+                if( PREDICTION_VERBOSE ):
+                    print("\n", labels[index], ": ", '%.08f' % predicted[0,index])
+                if predicted[0,index] > max_value:
+                    max_value_index = index
+                    max_value = predicted[0,index]
+
+            # Output the prediction
+            if max_value < 0.5:
+                if( PREDICTION_VERBOSE ):
+                    print("GUESS: Nothing")
+                classification['data'].append( { "category" : "NO", "time" : start_sec } )
+            else:
+                if( PREDICTION_VERBOSE ):
+                    print('\n\nGUESS: ', labels[max_value_index])
+                classification['data'].append( { "category" : labels[max_value_index], "time" : start_sec } )
+    if( PREDICTION_VERBOSE ):
+        print(classify_dict)
+
+    return classify_dict
 
 class AcousticIndices(object):
 
@@ -876,9 +922,6 @@ class AcousticIndices(object):
 
     def get_acoustic_indices(self):
         feature_vector = []
-
-        feature_vector.append(self.get_average_signal_amplitude())
-        feature_vector.append(self.get_background_noise())
         feature_vector.append(self.get_snr())
         feature_vector.append(self.get_acoustic_activity())
         feature_vector.append(self.get_acoustic_activity_count())
@@ -890,18 +933,15 @@ class AcousticIndices(object):
         feature_vector.append(self.get_acoustic_complexity_index())
         feature_vector.append(self.get_shannon_index())
         feature_vector.append(self.get_median_amplitude_envelope())
-        feature_vector.append(self.get_mid_band_activity())
         feature_vector.append(self.get_spectral_maxima_entropy())
         feature_vector.extend(self.get_spectral_average_variance_entropy())
-        feature_vector.extend(self.get_spectral_diversity_persistance())
+        #feature_vector.extend(self.get_spectral_diversity_persistance())
 
         return feature_vector
 
     @staticmethod
     def get_acoustic_indices_headers():
         feature_headers = []
-        feature_headers.append("Average Signal Amplitude")
-        feature_headers.append("Background Noise")
         feature_headers.append("SNR")
         feature_headers.append("Acoustic Activity")
         feature_headers.append("Acoustic Activity Count")
@@ -909,24 +949,44 @@ class AcousticIndices(object):
         feature_headers.append("Temporal Entropy")
         feature_headers.append("Spectral Entropy")
         feature_headers.append("Acoustic Entropy")
-        feature_headers.extend(["Antrhophony","Biophony","Normalized Difference Soundscape Index"])
+        feature_headers.extend(["Anthrophony","Biophony","Normalized Difference Soundscape Index"])
         feature_headers.append("Acoustic Complexity Index")
         feature_headers.append("Shannon Index")
         feature_headers.append("Median Of Amplitude Envelope")
-        feature_headers.append("Mid Band Activity")
         feature_headers.append("Entropy Of Spectral Maxima")
         feature_headers.append("Entropy Of Spectral Average")
         feature_headers.append("Entropy Of Spectral Variance")
-        feature_headers.append("Spectral Diversity")
-        feature_headers.append("Spectral Persistence")
+        #feature_headers.append("Spectral Diversity")
+        #feature_headers.append("Spectral Persistence")
 
         return feature_headers
 
+    @staticmethod
+    def get_acoustic_indices_descs():
+        feature_descs = []
+        feature_descs.append("The decibel difference of the highest amplitude acoustic event and the background noise.")
+        feature_descs.append("Fraction of frames where the signal is >3dB above background. ")
+        feature_descs.append("The number of times acoustic activity events occurred. ")
+        feature_descs.append("The mean length of acoustic activity events. ")
+        feature_descs.append("[Ht] Complex amplitude signal - tends towards 1 and is sensitive to consistent sound. ")
+        feature_descs.append("[Hs] or [Hf] complex frequency signal - tends towards 1 and is sensitive to consistent sound. ")
+        feature_descs.append("[H] assessment of pure to random noise: [Hs] x [Ht]. ")
+        feature_descs.extend(["Anthrophony Desc","Biophony Desc","ratio of human to biotic sound - values of 1 equate to no human sound. "])
+        feature_descs.append("Heterogeneity in sound intensity - high values represent more dynamically changing sounds. ")
+        feature_descs.append("Entropy of frequency - noisy will tend towards 1. ")
+        feature_descs.append("Linearly related to number of animal vocalizations, part of acoustic richness. ")
+        feature_descs.append("Indicator of species richness. ")
+        feature_descs.append("Entropy Of Spectral Average Desc. ")
+        feature_descs.append("Indicator of species richness. ")
+        #feature_descs.append("Spectral Diversity")
+        #feature_descs.append("Spectral Persistence")
+
+        return feature_descs
 
 '''
 ###------------------------------------------------------###
 Function: getAcousticIndices(fileOrDirectory, isDirectory)
-Params:
+Params: 
 - fileOrDirectory = file path OR directory with .WAV files
 - isDirectroy = OPTIONAL set to False. This must be called True if passing a directory instead of a single file.
 Caller: Api.py (Not yet)
@@ -941,20 +1001,13 @@ as a library to be used by our product.
 ###------------------------------------------------------###
 
 '''
-def getAcousticIndices():
-    # fileDictionary will be used to store the filecount keys with their respective file information
-    fileDictionary = {}
-
-    # Create file counter
-    fileCount = 0
+def getAcousticIndices(audiofile):
+    if( DEBUG_FLAG ):
+        print("[WORKING] Attempting to run acoustic indices calculator..")
 
     # loop through the files in the directory
-    for file in os.listdir("audio/"):
-
-        # correct the file path with the prefixed upload folder
-        filePath = "audio/" + file
-        data,fs  =  librosa.load(filePath,sr=None,offset=0,duration=60)
-
+    try:
+        data,fs  =  librosa.load(audiofile, sr=None, offset=0, duration=60)
         # mono channel
         data = AudioProcessing.convert_to_mono(data)
 
@@ -965,8 +1018,13 @@ def getAcousticIndices():
         # extracting indices
         acousticIndices = AcousticIndices(data_chunk,new_fs)
         acoustic_indices = acousticIndices.get_acoustic_indices()
-        acoustic_headers = acousticIndices.get_acoustic_indices_headers()
 
+        acoustic_indices = list(map(lambda x: round(x, 4), acoustic_indices))
+        if(PREDICTION_VERBOSE):
+            print("Acoustic Indice Values: ", acoustic_indices)
+
+        acoustic_headers = acousticIndices.get_acoustic_indices_headers()
+        acoustic_descs = acousticIndices.get_acoustic_indices_descs()
         # singleResultArray is used to store the results of one file (List of dictionaries)
         singleResultArray = []
 
@@ -974,44 +1032,20 @@ def getAcousticIndices():
         for i in range(len(acoustic_headers)):
             # per indices in the length of the acoustic tags,
             # append dictionary items.
-            singleResultArray.append({"Index": acoustic_headers[i], "Other Name" : acoustic_indices[i]})
-        # append result dictionary to the final results array
-        fileDictionary[fileCount] = singleResultArray
-        fileCount += 1
+            singleResultArray.append({"index": acoustic_headers[i], "value" : acoustic_indices[i], "desc" : acoustic_descs[i]})
 
-    return fileDictionary
-
-
-
-# driver function
-def runScript():
-
-    # Create dictionary for storing return information
-    # Create a counter for files
-    finalResult = {}
-    fileCount = 0
-
-    #try:
-    # Retrieve File
-    for filename in os.listdir('audio/'):
-        audiofile = "audio/" + filename
-
-        # Create list to store information
-        result = []
-        result.append( classify_file( audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
-        result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
-        result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
-
-        # Add result list to finalResult dictionary with filecounter as the key
-        finalResult[fileCount] = result
-        fileCount += 1
+            # append result dictionary to the final results array
+            if( DEBUG_FLAG ):
+                print("[WORKING] Calculated " + acoustic_headers[i])
+    except Exception as e:
+        track = traceback.format_exc()
+        print(track)
+        singleResultArray = "ERROR_PRESENT"
 
 
-    #except:
-    #    print('[FAILURE  -- Classification 1] File upload unsuccessful, or not file uploaded. Choosing default audio file instead.')
-
-
-    return finalResult
+    if( DEBUG_FLAG ):
+        print("[SUCCESS] Calculated all acoustic indices")
+    return singleResultArray
 
 def runStandalone( input_filepath, output_filepath ):
 
@@ -1020,10 +1054,9 @@ def runStandalone( input_filepath, output_filepath ):
     finalResult = {}
     fileCount = 0
 
-    #try:
-    # Retrieve File
-    for filename in os.listdir('audio/'):
-        audiofile = "audio/" + filename
+    # Retrieve File(s)
+    for filename in os.listdir(input_filepath):
+        audiofile = input_filepath + '/' + filename
 
         if(os.path.isdir(output_filepath)):
             anthro_csv_file = output_filepath + "/Anthrophony-" + filename[:-4] + ".csv"
@@ -1031,28 +1064,34 @@ def runStandalone( input_filepath, output_filepath ):
             bio_csv_file    = output_filepath + "/Biophony-" + filename[:-4] + ".csv"
             indices_file    = output_filepath + "/Acoustic_Indices-" + filename[:-4] + ".csv"
         else:
-            sys.exit("Output filepath not set up correctly. Please retry. ")
+            sys.exit("Output filepath not set up correctly. Please retry.")
 
         csv_columns = ['category','time']
-        indice_columns = ['Index', 'Other Name']
+        indice_columns = ['index', 'desc', 'value']
 
-        print("[WORKING] Running classification on file ", filename)
-        #class_data=runScript()
+        if DEBUG_FLAG : print("[WORKING] Loading CNN Models..")
+        all_models = [ load_model('model\\anthro\\ant_cnn_model.h5'),
+                       load_model('model\\bio\\bio_cnn_model.h5'),
+                       load_model('model\\geo\\geo_cnn_model.h5') ]
+        if DEBUG_FLAG : print("[SUCCESS] Loaded CNN Models..")
 
-        # Create list to store information
-        result = []
-        result.append( classify_file( audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
-        result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
-        result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
+        if DEBUG_FLAG:
+            print("[WORKING] Running classification on file ", filename)
 
-        class_data = result
+        # # Create list to store information
+        # result = []
+        # result.append( classify_file(audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
+        # result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
+        # result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
+
+        class_data = classify_file( audiofile, all_models )
 
         anthro_output_dict = class_data[0]["data"]
         geo_output_dict    = class_data[1]["data"]
         bio_output_dict    = class_data[2]["data"]
 
         print("[WORKING] Running indices classification on file ", filename)
-        indices_dict = getAcousticIndices()[0]
+        indices_dict = getAcousticIndices(audiofile)
 
         # Output anthrophony csv file
         try:
@@ -1062,7 +1101,7 @@ def runStandalone( input_filepath, output_filepath ):
                 for data in anthro_output_dict:
                     writer.writerow(data)
         except IOError:
-            print("I/O error")
+            print("I/O error in Anthrophony CSV Output")
 
         # Output geophony csv file
         try:
@@ -1072,7 +1111,7 @@ def runStandalone( input_filepath, output_filepath ):
                 for data in geo_output_dict:
                     writer.writerow(data)
         except IOError:
-            print("I/O error")
+            print("I/O error in Geophony CSV Output")
 
         # Output biophony csv file
         try:
@@ -1082,7 +1121,8 @@ def runStandalone( input_filepath, output_filepath ):
                 for data in bio_output_dict:
                     writer.writerow(data)
         except IOError:
-            print("I/O error")
+            print("I/O error in Biophony CSV Output")
+
         print("[SUCCESS] Wrote classification results to .csv file")
 
         # Output acoustic indices csv file
@@ -1093,14 +1133,18 @@ def runStandalone( input_filepath, output_filepath ):
                 for data in indices_dict:
                     writer.writerow(data)
         except IOError:
-            print("I/O error")
+            print("I/O error in Acoustic Indice CSV Output")
+
         print("[SUCCESS] Wrote indices classification results to .csv file")
 
 class CommandLine:
     def __init__(self):
-        parser = argparse.ArgumentParser(description = "Description for my parser")
+        print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
+        print("DESCRIPTION:\nS.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.\n")
+        print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
+        parser = argparse.ArgumentParser(description = "S.N.A.W Parser")
+        parser.add_argument("-i", "--input", help = "Select file directory for input files (audio file(s) in WAV format)", required = True, default = "")
         parser.add_argument("-o", "--output", help = "Select file directory for output files", required = True, default = "")
-        parser.add_argument("-i", "--input", help = "Input single file or a file directory", required = True, default = "")
 
         argument = parser.parse_args()
         status = False
@@ -1116,7 +1160,7 @@ class CommandLine:
             status = True
             in_filepath = argument.input
         if not status:
-            print("Maybe you want to -h, -i and -o, as arguments ?")
+            print("To analyze audio, arguments -i and -o are required. Type -h for help.")
 
         runStandalone( in_filepath, out_filepath )
 
