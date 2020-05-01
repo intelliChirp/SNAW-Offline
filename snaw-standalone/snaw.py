@@ -1,10 +1,3 @@
-import keras
-from keras.models import load_model
-from keras.models import Sequential
-from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, LSTM, Activation
-from keras.utils import to_categorical
-import wandb
-from wandb.keras import WandbCallback
 from scipy import signal
 from pyAudioAnalysis import audioSegmentation as aS
 from scipy import interpolate
@@ -24,13 +17,172 @@ import json
 import argparse
 import traceback
 
-# Constants
-DEBUG_FLAG = True
+#################### CONSTANTS ####################
+
+# Display Steps - Prints when each step starts and completes
+# Prediction Verbose - Prints values of the each prediction
+DISPLAY_ALL_STEPS = False
 PREDICTION_VERBOSE = False
 
+# Classification Threshold - Label the current timestep's
+#                            category to the highest confidence
+#                            value if above this threshold.
+#                            Ex: All biophony categories are 
+#                            around 0.2 confidence, but BBI is 0.6.
+#                            0.6 > 0.5 threshold, so attach BBI label.
+#                            If no categories are 0.5, label "Nothing"
+CLASSIFICATION_THRESHOLD = 0.5
+
+# Path to each CNN model (Example format: 'model\\anthro\\model.h5)
+ANTHRO_CNN_MODEL = 'model\\anthro\\ant_cnn_model.h5'
+BIO_CNN_MODEL = 'model\\bio\\bio_cnn_model.h5'
+GEO_CNN_MODEL = 'model\\geo\\geo_cnn_model.h5'
+
+####################################################
 # Removes warning: 
 # WARNING = "I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2"
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+
+class CommandLine:
+    def __init__(self):
+        # print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
+        # print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
+        parser = argparse.ArgumentParser(
+            description = "Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)! S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.",
+            epilog="And that's how you'd foo a bar")
+        parser.add_argument("-i", "--input", help = "Selected file directory for input files (audio file(s) in WAV format)", required = True, default = "")
+        parser.add_argument("-o", "--output", help = "Selected file directory for output CSV files", required = True, default = "")
+
+        argument = parser.parse_args()
+        status = False
+        in_filepath = ""
+        out_filepath = ""
+
+        if argument.input:
+            print("You have used '-i' or '--input' with argument: {0}".format(argument.input))
+            status = True
+            in_filepath = argument.input
+        if argument.output:
+            print("You have used '-o' or '--output' with argument: {0}".format(argument.output))
+            status = True
+            out_filepath = argument.output
+        if not status:
+            print("To analyze audio, arguments -i and -o are required. Type -h for help.")
+
+        runStandalone( in_filepath, out_filepath )
+
+def runStandalone(input_filepath, output_filepath):
+
+    # imports needed for classificaiton
+    import keras
+    from keras.models import load_model
+    from keras.models import Sequential
+    from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, LSTM, Activation
+    from keras.utils import to_categorical
+    import wandb
+    from wandb.keras import WandbCallback
+    
+    # Create dictionary for storing return information
+    # Initialize a file counter
+    finalResult = {}
+    fileCount = 0
+
+    # Retrieve File(s) and run classifcation
+    for filename in os.listdir(input_filepath):
+        audiofile = input_filepath + '/' + filename
+
+        if(os.path.isdir(output_filepath)):
+            anthro_csv_file = output_filepath + "/Anthrophony-" + filename[:-4] + ".csv"
+            geo_csv_file    = output_filepath + "/Geophony-" + filename[:-4] + ".csv"
+            bio_csv_file    = output_filepath + "/Biophony-" + filename[:-4] + ".csv"
+            indices_file    = output_filepath + "/Acoustic_Indices-" + filename[:-4] + ".csv"
+            csv_file = output_filepath + "/classification_" + filename[:-4] + ".csv"
+        else:
+            sys.exit("Output filepath not set up correctly. Please retry.")
+
+        csv_columns = ['category','time']
+        indice_columns = ['index', 'desc', 'value']
+        all_columns = ['category','time', 'index', 'desc', 'value']
+
+        print("Starting classification on file: ", filename)
+
+        if DISPLAY_ALL_STEPS : print("[WORKING] Loading CNN Models..")
+
+        all_models = [ load_model(ANTHRO_CNN_MODEL),
+                       load_model(BIO_CNN_MODEL),
+                       load_model(GEO_CNN_MODEL) ]
+
+        if DISPLAY_ALL_STEPS : print("[SUCCESS] Loaded CNN Models..")
+
+        if DISPLAY_ALL_STEPS : print("[WORKING] Running classification on file ", filename)
+
+        # # Create list to store information
+        # result = []
+        # result.append( classify_file(audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
+        # result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
+        # result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
+
+        class_data = classify_file( audiofile, all_models )
+
+        anthro_output_dict = class_data[0]["data"]
+        geo_output_dict    = class_data[1]["data"]
+        bio_output_dict    = class_data[2]["data"]
+
+        if DISPLAY_ALL_STEPS: print("[WORKING] Running indices classification on file ", filename)
+
+        indices_dict = getAcousticIndices(audiofile)
+        
+        ### Output to CSV ###
+
+        # Output anthrophony csv file
+        try:
+            with open(anthro_csv_file, 'w') as csvfile_a:
+                writer = csv.DictWriter(csvfile_a, fieldnames=csv_columns)
+                writer.writeheader()
+                for data in anthro_output_dict:
+                    writer.writerow(data)
+        except IOError:
+            print("I/O error in Anthrophony CSV Output")
+
+        # Output geophony csv file
+        try:
+            with open(geo_csv_file, 'w') as csvfile_g:
+                writer = csv.DictWriter(csvfile_g, fieldnames=csv_columns)
+                writer.writeheader()
+                for data in geo_output_dict:
+                    writer.writerow(data)
+        except IOError:
+            print("I/O error in Geophony CSV Output")
+
+        # Output biophony csv file
+        try:
+            with open(bio_csv_file, 'w') as csvfile_b:
+                writer = csv.DictWriter(csvfile_b, fieldnames=csv_columns)
+                writer.writeheader()
+                for data in bio_output_dict:
+                    writer.writerow(data)
+        except IOError:
+            print("I/O error in Biophony CSV Output")
+        
+        if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote classification results to .csv file")
+
+        # Output acoustic indices csv file
+        try:
+            with open(indices_file, 'w') as csvfile_i:
+                writer = csv.DictWriter(csvfile_i, fieldnames=indice_columns)
+                writer.writeheader()
+                for data in indices_dict:
+                    writer.writerow(data)
+        except IOError:
+            print("I/O error in Acoustic Indice CSV Output")
+
+        if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
+        
+        print("Completed classification on file: ", filename)
+    
+    # Completed classification of all audio files
+    if DISPLAY_ALL_STEPS: print("[SUCCESS] Completed classifications for all inputted audio files.")
 
 class AudioProcessing(object):
 
@@ -300,7 +452,7 @@ def classify_file(audio_file, all_models) :
         for labels, predicted, classification in zip( all_labels, all_predicted, classify_dict ) :
             # Output the prediction values for each class
             if( PREDICTION_VERBOSE ):
-                print ('PREDICTED VALUES')
+                print ('\nPREDICTED VALUES: ')
             labels_indices = range(len(labels))
             max_value = 0
             max_value_index = 0
@@ -312,13 +464,13 @@ def classify_file(audio_file, all_models) :
                     max_value = predicted[0,index]
 
             # Output the prediction
-            if max_value < 0.5:
+            if max_value < CLASSIFICATION_THRESHOLD:
                 if( PREDICTION_VERBOSE ):
-                    print("GUESS: Nothing")
+                    print("\nGUESS: Nothing")
                 classification['data'].append( { "category" : "NO", "time" : start_sec } )
             else:
                 if( PREDICTION_VERBOSE ):
-                    print('\n\nGUESS: ', labels[max_value_index])
+                    print('\nGUESS: ', labels[max_value_index])
                 classification['data'].append( { "category" : labels[max_value_index], "time" : start_sec } )
     if( PREDICTION_VERBOSE ):
         print(classify_dict)
@@ -1000,7 +1152,7 @@ as a library to be used by our product.
 
 '''
 def getAcousticIndices(audiofile):
-    if( DEBUG_FLAG ): print("[WORKING] Attempting to run acoustic indices calculator..")
+    if( DISPLAY_ALL_STEPS ): print("[WORKING] Attempting to run acoustic indices calculator..")
 
     # loop through the files in the directory
     try:
@@ -1018,7 +1170,7 @@ def getAcousticIndices(audiofile):
 
         acoustic_indices = list(map(lambda x: round(x, 4), acoustic_indices))
         if(PREDICTION_VERBOSE):
-            print("Acoustic Indice Values: ", acoustic_indices)
+            print("\nAcoustic Indice Values:\n", acoustic_indices, "\n")
 
         acoustic_headers = acousticIndices.get_acoustic_indices_headers()
         acoustic_descs = acousticIndices.get_acoustic_indices_descs()
@@ -1032,138 +1184,16 @@ def getAcousticIndices(audiofile):
             singleResultArray.append({"index": acoustic_headers[i], "value" : acoustic_indices[i], "desc" : acoustic_descs[i]})
 
             # append result dictionary to the final results array
-            if( DEBUG_FLAG ): print("[WORKING] Calculated " + acoustic_headers[i])
+            if( DISPLAY_ALL_STEPS ): print("[WORKING] Calculated " + acoustic_headers[i])
     except Exception as e:
         track = traceback.format_exc()
         print(track)
         singleResultArray = "ERROR_PRESENT"
 
 
-    if( DEBUG_FLAG ):
+    if( DISPLAY_ALL_STEPS ):
         print("[SUCCESS] Calculated all acoustic indices")
     return singleResultArray
-
-def runStandalone(input_filepath, output_filepath):
-
-    # Create dictionary for storing return information
-    # Create a counter for files
-    finalResult = {}
-    fileCount = 0
-
-    # Retrieve File(s)
-    for filename in os.listdir(input_filepath):
-        audiofile = input_filepath + '/' + filename
-
-        if(os.path.isdir(output_filepath)):
-            anthro_csv_file = output_filepath + "/Anthrophony-" + filename[:-4] + ".csv"
-            geo_csv_file    = output_filepath + "/Geophony-" + filename[:-4] + ".csv"
-            bio_csv_file    = output_filepath + "/Biophony-" + filename[:-4] + ".csv"
-            indices_file    = output_filepath + "/Acoustic_Indices-" + filename[:-4] + ".csv"
-            csv_file = output_filepath + "/classification_" + filename[:-4] + ".csv"
-        else:
-            sys.exit("Output filepath not set up correctly. Please retry.")
-
-        csv_columns = ['category','time']
-        indice_columns = ['index', 'desc', 'value']
-        all_columns = ['category','time', 'index', 'desc', 'value']
-
-        if DEBUG_FLAG : print("[WORKING] Loading CNN Models..")
-
-        all_models = [ load_model('model\\anthro\\ant_cnn_model.h5'),
-                       load_model('model\\bio\\bio_cnn_model.h5'),
-                       load_model('model\\geo\\geo_cnn_model.h5') ]
-
-        if DEBUG_FLAG : print("[SUCCESS] Loaded CNN Models..")
-
-        if DEBUG_FLAG: print("[WORKING] Running classification on file ", filename)
-
-        # # Create list to store information
-        # result = []
-        # result.append( classify_file(audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
-        # result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
-        # result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
-
-        class_data = classify_file( audiofile, all_models )
-
-        anthro_output_dict = class_data[0]["data"]
-        geo_output_dict    = class_data[1]["data"]
-        bio_output_dict    = class_data[2]["data"]
-
-        if DEBUG_FLAG: print("[WORKING] Running indices classification on file ", filename)
-
-        indices_dict = getAcousticIndices(audiofile)
-        
-        # Output anthrophony csv file
-        try:
-            with open(anthro_csv_file, 'w') as csvfile_a:
-                writer = csv.DictWriter(csvfile_a, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in anthro_output_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Anthrophony CSV Output")
-
-        # Output geophony csv file
-        try:
-            with open(geo_csv_file, 'w') as csvfile_g:
-                writer = csv.DictWriter(csvfile_g, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in geo_output_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Geophony CSV Output")
-
-        # Output biophony csv file
-        try:
-            with open(bio_csv_file, 'w') as csvfile_b:
-                writer = csv.DictWriter(csvfile_b, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in bio_output_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Biophony CSV Output")
-        
-        if DEBUG_FLAG: print("[SUCCESS] Wrote classification results to .csv file")
-
-        # Output acoustic indices csv file
-        try:
-            with open(indices_file, 'w') as csvfile_i:
-                writer = csv.DictWriter(csvfile_i, fieldnames=indice_columns)
-                writer.writeheader()
-                for data in indices_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Acoustic Indice CSV Output")
-
-        if DEBUG_FLAG: print("[SUCCESS] Wrote indices classification results to .csv file")
-
-class CommandLine:
-    def __init__(self):
-        # print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
-        # print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
-        parser = argparse.ArgumentParser(
-            description = "S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.",
-            epilog="And that's how you'd foo a bar")
-        parser.add_argument("-i", "--input", help = "Selected file directory for input files (audio file(s) in WAV format)", required = True, default = "")
-        parser.add_argument("-o", "--output", help = "Selected file directory for output files", required = True, default = "")
-
-        argument = parser.parse_args()
-        status = False
-        in_filepath = ""
-        out_filepath = ""
-
-        if argument.output:
-            print("You have used '-o' or '--output' with argument: {0}".format(argument.output))
-            status = True
-            out_filepath = argument.output
-        if argument.input:
-            print("You have used '-i' or '--input' with argument: {0}".format(argument.input))
-            status = True
-            in_filepath = argument.input
-        if not status:
-            print("To analyze audio, arguments -i and -o are required. Type -h for help.")
-
-        runStandalone( in_filepath, out_filepath )
 
 if __name__ == '__main__':
    app = CommandLine()
