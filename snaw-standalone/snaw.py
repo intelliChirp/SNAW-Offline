@@ -16,11 +16,12 @@ import os
 import json
 import argparse
 import traceback
+import warnings
 
 #################### CONSTANTS ####################
 
-# Display Steps - Prints when each step starts and completes
-# Prediction Verbose - Prints values of the each prediction
+# Display All Steps - Prints when each step starts and completes
+# Prediction Verbose - Prints values for each prediction
 DISPLAY_ALL_STEPS = False
 PREDICTION_VERBOSE = False
 
@@ -39,18 +40,28 @@ BIO_CNN_MODEL = 'model\\bio\\bio_cnn_model.h5'
 GEO_CNN_MODEL = 'model\\geo\\geo_cnn_model.h5'
 
 ####################################################
-# Removes warning: 
-# WARNING = "I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2"
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+################ Removing Warnings #################
+#####    Comment out to view any warnings    #######
+
+# Remove tensorflow messages:
+# Levels (0,1,2,3): 
+#   0     | DEBUG            | [Default] Print all messages       
+#   1     | INFO             | Filter out INFO messages           
+#   2     | WARNING          | Filter out INFO & WARNING messages 
+#   3     | ERROR            | Filter out all messages
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# Remove deprecation warnings
+warnings.filterwarnings("ignore")
+
+####################################################
 
 class CommandLine:
     def __init__(self):
         # print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
         # print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
         parser = argparse.ArgumentParser(
-            description = "Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)! S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.",
-            epilog="And that's how you'd foo a bar")
+            description = "Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)! S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.")
         parser.add_argument("-i", "--input", help = "Selected file directory for input files (audio file(s) in WAV format)", required = True, default = "")
         parser.add_argument("-o", "--output", help = "Selected file directory for output CSV files", required = True, default = "")
 
@@ -74,14 +85,15 @@ class CommandLine:
 
 def runStandalone(input_filepath, output_filepath):
 
-    # imports needed for classificaiton
-    import keras
+    # import for loading the cnn models
     from keras.models import load_model
-    from keras.models import Sequential
-    from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, LSTM, Activation
-    from keras.utils import to_categorical
-    import wandb
-    from wandb.keras import WandbCallback
+
+    # load models for classifying all audio files
+    if DISPLAY_ALL_STEPS : print("[WORKING] Loading CNN Models..")
+    all_models = [ load_model(ANTHRO_CNN_MODEL),
+                   load_model(BIO_CNN_MODEL),
+                   load_model(GEO_CNN_MODEL) ]
+    if DISPLAY_ALL_STEPS : print("[SUCCESS] Loaded CNN Models..")
     
     # Create dictionary for storing return information
     # Initialize a file counter
@@ -105,15 +117,7 @@ def runStandalone(input_filepath, output_filepath):
         indice_columns = ['index', 'desc', 'value']
         all_columns = ['category','time', 'index', 'desc', 'value']
 
-        print("Starting classification on file: ", filename)
-
-        if DISPLAY_ALL_STEPS : print("[WORKING] Loading CNN Models..")
-
-        all_models = [ load_model(ANTHRO_CNN_MODEL),
-                       load_model(BIO_CNN_MODEL),
-                       load_model(GEO_CNN_MODEL) ]
-
-        if DISPLAY_ALL_STEPS : print("[SUCCESS] Loaded CNN Models..")
+        print("\nStarting classification on file: ", filename)
 
         if DISPLAY_ALL_STEPS : print("[WORKING] Running classification on file ", filename)
 
@@ -182,7 +186,7 @@ def runStandalone(input_filepath, output_filepath):
         print("Completed classification on file: ", filename)
     
     # Completed classification of all audio files
-    if DISPLAY_ALL_STEPS: print("[SUCCESS] Completed classifications for all inputted audio files.")
+    print("\n[SUCCESS] All files have been successfuly classified. \nResults are located in: ", output_filepath)
 
 class AudioProcessing(object):
 
@@ -717,8 +721,6 @@ class AcousticIndices(object):
         average_segments_duration = np.mean(segments_duration)
         average_segments_duration_ms = (average_segments_duration/float(self.fs))*1000.0
 
-        # print(average_segments_duration_ms)
-
         average_segments_duration_ms = AcousticIndices.get_normalized_value(average_segments_duration_ms,(0,3000))
 
         return average_segments_duration_ms
@@ -1106,8 +1108,6 @@ class AcousticIndices(object):
         feature_headers.append("Entropy Of Spectral Maxima")
         feature_headers.append("Entropy Of Spectral Average")
         feature_headers.append("Entropy Of Spectral Variance")
-        #feature_headers.append("Spectral Diversity")
-        #feature_headers.append("Spectral Persistence")
 
         return feature_headers
 
@@ -1128,8 +1128,6 @@ class AcousticIndices(object):
         feature_descs.append("Indicator of species richness. ")
         feature_descs.append("Entropy Of Spectral Average Desc. ")
         feature_descs.append("Indicator of species richness. ")
-        #feature_descs.append("Spectral Diversity")
-        #feature_descs.append("Spectral Persistence")
 
         return feature_descs
 
@@ -1138,7 +1136,8 @@ class AcousticIndices(object):
 Function: getAcousticIndices(fileOrDirectory, isDirectory)
 Params: 
 - fileOrDirectory = file path OR directory with .WAV files
-- isDirectroy = OPTIONAL set to False. This must be called True if passing a directory instead of a single file.
+- isDirectroy = OPTIONAL set to False. This must be called True 
+                if passing a directory instead of a single file.
 Caller: Api.py (Not yet)
 ###------------------------------------------------------###
 This function begins the process of generating the Acoustic
