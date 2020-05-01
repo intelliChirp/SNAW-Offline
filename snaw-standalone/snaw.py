@@ -1,15 +1,15 @@
-from scipy import signal
-from pyAudioAnalysis import audioSegmentation as aS
-from scipy import interpolate
-from scipy.signal import butter, lfilter, freqz
-from scipy.stats import itemfreq
-from keras.models import load_model
 import keras
+from keras.models import load_model
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, LSTM, Activation
 from keras.utils import to_categorical
 import wandb
 from wandb.keras import WandbCallback
+from scipy import signal
+from pyAudioAnalysis import audioSegmentation as aS
+from scipy import interpolate
+from scipy.signal import butter, lfilter, freqz
+from scipy.stats import itemfreq
 import csv
 import yaml
 import sys
@@ -240,15 +240,15 @@ class AudioProcessing(object):
         return background_noise
 
 # CLassify Files with CNNs
-def classify_file( audio_file, all_models ) :
+def classify_file(audio_file, all_models) :
 
     all_labels = [ ["AAT", "AHV", "AMA", "ART", "ASI", "AVH", "AVT"],
                    ["BRA", "BAM", "BBI", "BMA", "BIN"],
                    ["GOC", "GRA", "GST","GWG", "GWC"] ]
 
     classify_dict = [ {'name' : 'Anthrophony',
-                     'color' : '#0088FE',
-                     'data' : [] },
+                       'color' : '#0088FE',
+                       'data' : [] },
                       {'name': 'Biophony',
                        'color': '#00C49F',
                        'data': [] },
@@ -256,11 +256,9 @@ def classify_file( audio_file, all_models ) :
                        'color': '#FFBB28',
                        'data': [] } ]
 
-    ## Running the models
-
-    n_mfcc = 128 # bucket size !!SUBJECT TO CHANGE!!
-    max_len = 32 # max_len size !!SUBJECT TO CHANGE!!
-    channels = 1 # channels !!SUBJECT TO CHANGE!!
+    n_mfcc = 128 # bucket size
+    max_len = 32 # max_len size
+    channels = 1 # channels
 
     # convert file to wav2mfcc
     # Mel-frequency cepstral coefficients
@@ -1002,8 +1000,7 @@ as a library to be used by our product.
 
 '''
 def getAcousticIndices(audiofile):
-    if( DEBUG_FLAG ):
-        print("[WORKING] Attempting to run acoustic indices calculator..")
+    if( DEBUG_FLAG ): print("[WORKING] Attempting to run acoustic indices calculator..")
 
     # loop through the files in the directory
     try:
@@ -1035,8 +1032,7 @@ def getAcousticIndices(audiofile):
             singleResultArray.append({"index": acoustic_headers[i], "value" : acoustic_indices[i], "desc" : acoustic_descs[i]})
 
             # append result dictionary to the final results array
-            if( DEBUG_FLAG ):
-                print("[WORKING] Calculated " + acoustic_headers[i])
+            if( DEBUG_FLAG ): print("[WORKING] Calculated " + acoustic_headers[i])
     except Exception as e:
         track = traceback.format_exc()
         print(track)
@@ -1047,7 +1043,7 @@ def getAcousticIndices(audiofile):
         print("[SUCCESS] Calculated all acoustic indices")
     return singleResultArray
 
-def runStandalone( input_filepath, output_filepath ):
+def runStandalone(input_filepath, output_filepath):
 
     # Create dictionary for storing return information
     # Create a counter for files
@@ -1063,20 +1059,23 @@ def runStandalone( input_filepath, output_filepath ):
             geo_csv_file    = output_filepath + "/Geophony-" + filename[:-4] + ".csv"
             bio_csv_file    = output_filepath + "/Biophony-" + filename[:-4] + ".csv"
             indices_file    = output_filepath + "/Acoustic_Indices-" + filename[:-4] + ".csv"
+            csv_file = output_filepath + "/classification_" + filename[:-4] + ".csv"
         else:
             sys.exit("Output filepath not set up correctly. Please retry.")
 
         csv_columns = ['category','time']
         indice_columns = ['index', 'desc', 'value']
+        all_columns = ['category','time', 'index', 'desc', 'value']
 
         if DEBUG_FLAG : print("[WORKING] Loading CNN Models..")
+
         all_models = [ load_model('model\\anthro\\ant_cnn_model.h5'),
                        load_model('model\\bio\\bio_cnn_model.h5'),
                        load_model('model\\geo\\geo_cnn_model.h5') ]
+
         if DEBUG_FLAG : print("[SUCCESS] Loaded CNN Models..")
 
-        if DEBUG_FLAG:
-            print("[WORKING] Running classification on file ", filename)
+        if DEBUG_FLAG: print("[WORKING] Running classification on file ", filename)
 
         # # Create list to store information
         # result = []
@@ -1090,9 +1089,10 @@ def runStandalone( input_filepath, output_filepath ):
         geo_output_dict    = class_data[1]["data"]
         bio_output_dict    = class_data[2]["data"]
 
-        print("[WORKING] Running indices classification on file ", filename)
-        indices_dict = getAcousticIndices(audiofile)
+        if DEBUG_FLAG: print("[WORKING] Running indices classification on file ", filename)
 
+        indices_dict = getAcousticIndices(audiofile)
+        
         # Output anthrophony csv file
         try:
             with open(anthro_csv_file, 'w') as csvfile_a:
@@ -1122,8 +1122,8 @@ def runStandalone( input_filepath, output_filepath ):
                     writer.writerow(data)
         except IOError:
             print("I/O error in Biophony CSV Output")
-
-        print("[SUCCESS] Wrote classification results to .csv file")
+        
+        if DEBUG_FLAG: print("[SUCCESS] Wrote classification results to .csv file")
 
         # Output acoustic indices csv file
         try:
@@ -1135,16 +1135,17 @@ def runStandalone( input_filepath, output_filepath ):
         except IOError:
             print("I/O error in Acoustic Indice CSV Output")
 
-        print("[SUCCESS] Wrote indices classification results to .csv file")
+        if DEBUG_FLAG: print("[SUCCESS] Wrote indices classification results to .csv file")
 
 class CommandLine:
     def __init__(self):
-        print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
-        print("DESCRIPTION:\nS.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.\n")
-        print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
-        parser = argparse.ArgumentParser(description = "S.N.A.W Parser")
-        parser.add_argument("-i", "--input", help = "Select file directory for input files (audio file(s) in WAV format)", required = True, default = "")
-        parser.add_argument("-o", "--output", help = "Select file directory for output files", required = True, default = "")
+        # print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
+        # print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
+        parser = argparse.ArgumentParser(
+            description = "S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.",
+            epilog="And that's how you'd foo a bar")
+        parser.add_argument("-i", "--input", help = "Selected file directory for input files (audio file(s) in WAV format)", required = True, default = "")
+        parser.add_argument("-o", "--output", help = "Selected file directory for output files", required = True, default = "")
 
         argument = parser.parse_args()
         status = False
