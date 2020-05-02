@@ -121,12 +121,6 @@ def runStandalone(input_filepath, output_filepath):
 
         if DISPLAY_ALL_STEPS : print("[WORKING] Running classification on file ", filename)
 
-        # # Create list to store information
-        # result = []
-        # result.append( classify_file(audiofile, anthro_model(), 'Anthrophony', '#0088FE' ) )
-        # result.append( classify_file(audiofile, bio_model(), 'Biophony', '#00C49F' ) )
-        # result.append( classify_file(audiofile, geo_model(), 'Geophony', '#FFBB28' ) )
-
         class_data = classify_file( audiofile, all_models )
 
         anthro_output_dict = class_data[0]["data"]
@@ -172,14 +166,14 @@ def runStandalone(input_filepath, output_filepath):
         if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote classification results to .csv file")
 
         # Output acoustic indices csv file
-        try:
-            with open(indices_file, 'w') as csvfile_i:
-                writer = csv.DictWriter(csvfile_i, fieldnames=indice_columns)
-                writer.writeheader()
-                for data in indices_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Acoustic Indice CSV Output")
+        # try:
+        with open(indices_file, 'w') as csvfile_i:
+            writer = csv.DictWriter(csvfile_i, fieldnames=indice_columns)
+            writer.writeheader()
+            for data in indices_dict:
+                writer.writerow(data)
+        # except IOError:
+            # print("I/O error in Acoustic Indice CSV Output")
 
         if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
         
@@ -443,7 +437,6 @@ def classify_file(audio_file, all_models) :
             mfcc = mfcc[:, :max_len]
 
         # Convert wav to MFCC
-        #prediction_data = wav2mfcc('./prediction/nature_sc.wav')
         prediction_data = mfcc
 
         # Reshape to 4 dimensions
@@ -454,13 +447,13 @@ def classify_file(audio_file, all_models) :
         all_predicted = [ model.predict(prediction_data) for model in all_models ]
 
         for labels, predicted, classification in zip( all_labels, all_predicted, classify_dict ) :
-            # Output the prediction values for each class
             if( PREDICTION_VERBOSE ):
                 print ('\nPREDICTED VALUES: ')
             labels_indices = range(len(labels))
             max_value = 0
             max_value_index = 0
             for index in labels_indices:
+                # print the predicted values for each category at each timestamp
                 if( PREDICTION_VERBOSE ):
                     print("\n", labels[index], ": ", '%.08f' % predicted[0,index])
                 if predicted[0,index] > max_value:
@@ -481,6 +474,18 @@ def classify_file(audio_file, all_models) :
 
     return classify_dict
 
+
+'''
+###------------------------------------------------------###
+Function: AcousticIndices(object)
+###------------------------------------------------------###
+CREDIT:
+The below code is from the user "amogh3892" with repo
+"Acoustic-Indices." This set of files is being treated
+as a library to be used by our product.
+###------------------------------------------------------###
+
+'''
 class AcousticIndices(object):
 
     def __init__(self,data, fs,n_fft = 512, win_len = 512, hop_len = 512):
@@ -552,12 +557,6 @@ class AcousticIndices(object):
         envelope = AudioProcessing.get_envelope(abs(self.data), frame_size=1024)
         non_zero = envelope[np.nonzero(envelope)]
         data_log = 20*np.log10(non_zero)
-
-        # print(data_log.shape)
-        # kernel = 1/256.0*np.ones(156)
-        #
-        # data_log = np.convolve(data_log,kernel)
-        # print(data_log.shape)
 
         ind = np.where(data_log > threshold)
 
@@ -655,14 +654,6 @@ class AcousticIndices(object):
         pmf = pmf/float(total_samples)
 
         self.spectral_entropy = AudioProcessing.get_entropy(pmf)/np.log2(N)
-
-
-        # stft = self.stft[np.nonzero(self.stft)]
-        # stft = AudioProcessing.rescale(stft,(0,1))
-        # pdf,bins = AudioProcessing.get_histogram(stft,bins = np.arange(0,1 + 1.0/1000,1.0/1000))
-        # pdf = pdf[np.nonzero(pdf)]
-        # spectral_entropy = AudioProcessing.get_entropy(pdf)/np.log2(self.data.size)
-        # self.spectral_entropy = spectral_entropy
 
     def get_spectral_entropy(self):
         return self.spectral_entropy
@@ -768,8 +759,6 @@ class AcousticIndices(object):
         N = 2**10
 
         stft = np.copy(self.stft)
-        # stft = AudioProcessing.rescale(self.stft,(0,N))
-        # stft = stft.astype(np.uint16)
 
         for segment in self.segments:
             start = int(float(segment[0])/self.n_fft)
@@ -824,17 +813,6 @@ class AcousticIndices(object):
         for i in range(0,max_bin,frequency_interval):
             bin = psd[i:i + frequency_interval, :]
             biophony_levels.append(np.sum(bin) / psd_sum)
-        # # while i < total_bins*frequency_interval :
-        #
-        #     if i + frequency_interval > total_bins*frequency_interval:
-        #         bin = psd[i:, :]
-        #     else:
-        #
-        #         bin = psd[i:i + frequency_interval, :]
-
-
-
-            # i = i + frequency_interval
 
         a = biophony_levels[0]
         b = np.max(biophony_levels[1:])
@@ -1059,9 +1037,6 @@ class AcousticIndices(object):
             else:
                 newRunLengths.append(i)
 
-        #old method of filtering out run_lengths of 1, creates a Filter object... and didn't work properly.
-        #run_lengths = filter(lambda a: a != 1, run_lengths)
-
         spectral_diversity = cluster_count
         spectral_persistance = np.mean(newRunLengths)
 
@@ -1087,7 +1062,6 @@ class AcousticIndices(object):
         feature_vector.append(self.get_median_amplitude_envelope())
         feature_vector.append(self.get_spectral_maxima_entropy())
         feature_vector.extend(self.get_spectral_average_variance_entropy())
-        #feature_vector.extend(self.get_spectral_diversity_persistance())
 
         return feature_vector
 
