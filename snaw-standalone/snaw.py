@@ -105,17 +105,15 @@ def runStandalone(input_filepath, output_filepath):
         audiofile = input_filepath + '/' + filename
 
         if(os.path.isdir(output_filepath)):
-            anthro_csv_file = output_filepath + "/Anthrophony-" + filename[:-4] + ".csv"
-            geo_csv_file    = output_filepath + "/Geophony-" + filename[:-4] + ".csv"
-            bio_csv_file    = output_filepath + "/Biophony-" + filename[:-4] + ".csv"
-            indices_file    = output_filepath + "/Acoustic_Indices-" + filename[:-4] + ".csv"
-            csv_file = output_filepath + "/classification_" + filename[:-4] + ".csv"
+            csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
+
         else:
             sys.exit("Output filepath not set up correctly. Please retry.")
 
         csv_columns = ['category','time']
         indice_columns = ['index', 'desc', 'value']
-        all_columns = ['category','time', 'index', 'desc', 'value']
+        topHeaders = ['Anthrophony Model:', ' ', ' ', 'Biophony Model:', ' ', ' ', 'Geophony Model:', ' ', ' ', 'Acoustic Indices:']
+        secondaryHeaders = ['CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'Index', 'Value', 'Description']
 
         print("\nStarting classification on file: ", filename)
 
@@ -130,50 +128,54 @@ def runStandalone(input_filepath, output_filepath):
         if DISPLAY_ALL_STEPS: print("[WORKING] Running indices classification on file ", filename)
 
         indices_dict = getAcousticIndices(audiofile)
+        count = 0
+        whiteSpace=[]
+        timeStamps =[]
+        anthroClass = []
+        bioClass = []
+        geoClass = []
+        indices_index = []
+        indices_val = []
+        indices_desc = []
+
+        for item in anthro_output_dict:
+            anthroClass.append(item['category'])
+            timeStamps.append(count)
+            whiteSpace.append(' ')
+            count += 1
+
+        for item in bio_output_dict:
+            bioClass.append(item['category'])
+
+        for item in geo_output_dict:
+            geoClass.append(item['category'])
+
+        for item in indices_dict:
+            indices_index.append(item['index'])
+            indices_val.append(item['value'])
+            indices_desc.append(item['desc'])
+
+
+        for item in range(0, len(anthro_output_dict) - len(indices_dict)):
+            indices_index.append(' ')
+            indices_val.append(' ')
+            indices_desc.append(' ')
+
+        print(anthroClass)
+        informationToWrite = zip(anthroClass, timeStamps, whiteSpace, bioClass, timeStamps, whiteSpace, geoClass, timeStamps, whiteSpace, indices_index, indices_val, indices_desc)
         
         ### Output to CSV ###
 
         # Output anthrophony csv file
         try:
-            with open(anthro_csv_file, 'w') as csvfile_a:
-                writer = csv.DictWriter(csvfile_a, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in anthro_output_dict:
-                    writer.writerow(data)
+            with open(csv_file, 'w') as fileToWrite:
+                informationWriter = csv.writer(fileToWrite)
+                informationWriter.writerow(topHeaders)
+                informationWriter.writerow(secondaryHeaders)
+                for row in informationToWrite:
+                    informationWriter.writerow(row)
         except IOError:
             print("I/O error in Anthrophony CSV Output")
-
-        # Output geophony csv file
-        try:
-            with open(geo_csv_file, 'w') as csvfile_g:
-                writer = csv.DictWriter(csvfile_g, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in geo_output_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Geophony CSV Output")
-
-        # Output biophony csv file
-        try:
-            with open(bio_csv_file, 'w') as csvfile_b:
-                writer = csv.DictWriter(csvfile_b, fieldnames=csv_columns)
-                writer.writeheader()
-                for data in bio_output_dict:
-                    writer.writerow(data)
-        except IOError:
-            print("I/O error in Biophony CSV Output")
-        
-        if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote classification results to .csv file")
-
-        # Output acoustic indices csv file
-        # try:
-        with open(indices_file, 'w') as csvfile_i:
-            writer = csv.DictWriter(csvfile_i, fieldnames=indice_columns)
-            writer.writeheader()
-            for data in indices_dict:
-                writer.writerow(data)
-        # except IOError:
-            # print("I/O error in Acoustic Indice CSV Output")
 
         if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
         
