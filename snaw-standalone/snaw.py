@@ -167,7 +167,7 @@ def runStandalone(input_filepath, output_filepath):
 
         # Output anthrophony csv file
         try:
-            with open(csv_file, 'w') as fileToWrite:
+            with open(csv_file, 'w', newline = '') as fileToWrite:
                 informationWriter = csv.writer(fileToWrite)
                 informationWriter.writerow(topHeaders)
                 informationWriter.writerow(secondaryHeaders)
