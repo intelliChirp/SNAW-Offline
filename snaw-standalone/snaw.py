@@ -155,11 +155,19 @@ def runStandalone(input_filepath, output_filepath):
             indices_val.append(item['value'])
             indices_desc.append(item['desc'])
 
+        if len(indices_index) > len(anthroClass):
+            for item in indices_dict:
+                anthroClass.append(' ')
+                bioClass.append(' ')
+                geoClass.append(' ')
+                timeStamps.append(' ')
+                whiteSpace.append(' ')
 
-        for item in range(0, len(anthro_output_dict) - len(indices_dict)):
-            indices_index.append(' ')
-            indices_val.append(' ')
-            indices_desc.append(' ')
+        else:
+            for item in range(0, len(anthro_output_dict) - len(indices_dict)):
+                indices_index.append(' ')
+                indices_val.append(' ')
+                indices_desc.append(' ')
 
         informationToWrite = zip(anthroClass, timeStamps, whiteSpace, bioClass, timeStamps, whiteSpace, geoClass, timeStamps, whiteSpace, indices_index, indices_val, indices_desc)
         
