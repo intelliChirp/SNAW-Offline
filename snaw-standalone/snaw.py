@@ -161,7 +161,6 @@ def runStandalone(input_filepath, output_filepath):
             indices_val.append(' ')
             indices_desc.append(' ')
 
-        print(anthroClass)
         informationToWrite = zip(anthroClass, timeStamps, whiteSpace, bioClass, timeStamps, whiteSpace, geoClass, timeStamps, whiteSpace, indices_index, indices_val, indices_desc)
         
         ### Output to CSV ###
