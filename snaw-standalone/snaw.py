@@ -15,7 +15,6 @@ import os
 import json
 import argparse
 import traceback
-import warnings
 
 
 #################### CONSTANTS ####################
@@ -53,6 +52,7 @@ GEO_CNN_MODEL = 'model\\geo\\geo_cnn_model.h5'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
+import warnings
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 # Remove deprecation warnings
 warnings.filterwarnings("ignore")
@@ -108,15 +108,15 @@ def runStandalone(input_filepath, output_filepath):
 
         # Error handling for incorrect file format
         if not audiofile.lower().endswith('.wav'):
-            print("\nFile: ", audiofile, " (Invalid File Format)")
+            print("\nError in File: ", audiofile, " (Invalid File Format)")
             print("Skipping File...")
             continue
 
         if(os.path.isdir(output_filepath)):
             csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
-
         else:
-            sys.exit("Output filepath not set up correctly. Please retry.")
+            os.mkdir(output_filepath)
+            csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
 
         csv_columns = ['category','time']
         indice_columns = ['index', 'desc', 'value']
