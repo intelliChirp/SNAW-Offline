@@ -17,20 +17,24 @@ import argparse
 import traceback
 
 
-#################### CONSTANTS ####################
+######################################################################
 
 # Display All Steps - Prints when each step starts and completes
 # Prediction Verbose - Prints values for each prediction
+# Remove Warnings - Removes all warnings to user
 DISPLAY_ALL_STEPS = False
 PREDICTION_VERBOSE = False
+REMOVE_WARNINGS = True
 
-# Classification Threshold - Label the current timestep's
-#                            category to the highest confidence
-#                            value if above this threshold.
-#                            Ex: All biophony categories are 
+# Classification Threshold - Threshold for label a given timestamp.
+#                            Label timestamp the category with 
+#                            the highest confidence value if above 
+#                            this threshold.
+#                            Example: All biophony categories are 
 #                            around 0.2 confidence, but BBI is 0.6.
 #                            0.6 > 0.5 threshold, so attach BBI label.
-#                            If no categories are 0.5, label "Nothing"
+#                            If no categories are above 0.5, use label
+#                            "Nothing".
 CLASSIFICATION_THRESHOLD = 0.5
 
 # Path to each CNN model (Example format: 'model\\anthro\\model.h5)
@@ -38,34 +42,36 @@ ANTHRO_CNN_MODEL = 'model\\anthro\\ant_cnn_model.h5'
 BIO_CNN_MODEL = 'model\\bio\\bio_cnn_model.h5'
 GEO_CNN_MODEL = 'model\\geo\\geo_cnn_model.h5'
 
+# Removing Warnings
+if (REMOVE_WARNINGS):
+    # Remove tensorflow messages:
+    # Levels (0,1,2,3): 
+    #   0     | DEBUG            | [Default] Print all messages       
+    #   1     | INFO             | Filter out INFO messages           
+    #   2     | WARNING          | Filter out INFO & WARNING messages 
+    #   3     | ERROR            | Filter out all messages
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+    import tensorflow as tf
+    import warnings
+
+    tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+    # Remove all other warnings
+    warnings.filterwarnings("ignore")
 ####################################################
 
-################ Removing Warnings #################
-#####    Comment out to view any warnings    #######
-
-# Remove tensorflow messages:
-# Levels (0,1,2,3): 
-#   0     | DEBUG            | [Default] Print all messages       
-#   1     | INFO             | Filter out INFO messages           
-#   2     | WARNING          | Filter out INFO & WARNING messages 
-#   3     | ERROR            | Filter out all messages
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-import tensorflow as tf
-import warnings
-tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-# Remove deprecation warnings
-warnings.filterwarnings("ignore")
-####################################################
+######################################################################
 
 class CommandLine:
     def __init__(self):
-        # print("Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)\n")
-        # print("INSTRUCTIONS:\nTo analyze audio, (2) directories are required:\n\t(1) directory for audio files (Ex: 'input')\n\t(1) directory for results of analysis. (Ex: 'output')\n")
         parser = argparse.ArgumentParser(
-            description = "Welcome to the Soundscape Noise Analysis Workbench (S.N.A.W.)! S.N.A.W will classify the Biophony, Geophony and Anthrophony in your audio files.")
-        parser.add_argument("-i", "--input", help = "Selected file directory for input files (audio file(s) in WAV format)", required = True, default = "")
-        parser.add_argument("-o", "--output", help = "Selected file directory for output CSV files", required = True, default = "")
+            description = "Welcome to the Soundscape Noise Analysis Workbench (SNAW)! SNAW will classify the Biophony, Geophony and Anthrophony in your audio files.",
+            epilog= "GitHub: https://github.com/intelliChirp/SNAW-Offline")
+        requiredArguments = parser.add_argument_group('required arguments')
+
+        requiredArguments.add_argument("-i", "--input", help = "file directory for input files (audio file(s) in WAV format)", required = True, default = "")
+        requiredArguments.add_argument("-o", "--output", help = "file directory for output CSV files", required = True, default = "")
 
         argument = parser.parse_args()
         status = False
@@ -90,25 +96,30 @@ def runStandalone(input_filepath, output_filepath):
     # import for loading the cnn models
     from keras.models import load_model
 
-    # load models for classifying all audio files
-    if DISPLAY_ALL_STEPS : print("[WORKING] Loading CNN Models..")
+    print("\nLoading CNN Models..")
     all_models = [ load_model(ANTHRO_CNN_MODEL),
                    load_model(BIO_CNN_MODEL),
                    load_model(GEO_CNN_MODEL) ]
-    if DISPLAY_ALL_STEPS : print("[SUCCESS] Loaded CNN Models..")
+    print("Loaded CNN Models..\n")
     
     # Create dictionary for storing return information
     # Initialize a file counter
     finalResult = {}
     fileCount = 0
 
-    # Retrieve File(s) and run classifcation
+    # Initilazing CSV column and header names
+    csv_columns = ['category','time']
+    indice_columns = ['index', 'desc', 'value']
+    topHeaders = ['Anthrophony Model:', ' ', ' ', 'Biophony Model:', ' ', ' ', 'Geophony Model:', ' ', ' ', 'Acoustic Indices:']
+    secondaryHeaders = ['CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'Index', 'Value', 'Description']
+
+    # Loop through file(s) and run CNN and acoustic indices classifcation
     for filename in os.listdir(input_filepath):
         audiofile = input_filepath + '/' + filename
-
+        
         # Error handling for incorrect file format
         if not audiofile.lower().endswith('.wav'):
-            print("\nError in File: ", audiofile, " (Invalid File Format)")
+            print("\nError in File: ", filename, " (Invalid File Format)")
             print("Skipping File...")
             continue
 
@@ -118,83 +129,78 @@ def runStandalone(input_filepath, output_filepath):
             os.mkdir(output_filepath)
             csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
 
-        csv_columns = ['category','time']
-        indice_columns = ['index', 'desc', 'value']
-        topHeaders = ['Anthrophony Model:', ' ', ' ', 'Biophony Model:', ' ', ' ', 'Geophony Model:', ' ', ' ', 'Acoustic Indices:']
-        secondaryHeaders = ['CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'Index', 'Value', 'Description']
-
-        print("\nStarting classification on file: ", filename)
-
-        if DISPLAY_ALL_STEPS : print("[WORKING] Running classification on file ", filename)
-
-        class_data = classify_file( audiofile, all_models )
-
-        anthro_output_dict = class_data[0]["data"]
-        geo_output_dict    = class_data[1]["data"]
-        bio_output_dict    = class_data[2]["data"]
-
-        if DISPLAY_ALL_STEPS: print("[WORKING] Running indices classification on file ", filename)
-
-        indices_dict = getAcousticIndices(audiofile)
-        count = 0
-        whiteSpace=[]
-        timeStamps =[]
-        anthroClass = []
-        bioClass = []
-        geoClass = []
-        indices_index = []
-        indices_val = []
-        indices_desc = []
-
-        for item in anthro_output_dict:
-            anthroClass.append(item['category'])
-            timeStamps.append(count)
-            whiteSpace.append(' ')
-            count += 1
-
-        for item in bio_output_dict:
-            bioClass.append(item['category'])
-
-        for item in geo_output_dict:
-            geoClass.append(item['category'])
-
-        for item in indices_dict:
-            indices_index.append(item['index'])
-            indices_val.append(item['value'])
-            indices_desc.append(item['desc'])
-
-        if len(indices_index) > len(anthroClass):
-            for item in indices_dict:
-                anthroClass.append(' ')
-                bioClass.append(' ')
-                geoClass.append(' ')
-                timeStamps.append(' ')
-                whiteSpace.append(' ')
-
-        else:
-            for item in range(0, len(anthro_output_dict) - len(indices_dict)):
-                indices_index.append(' ')
-                indices_val.append(' ')
-                indices_desc.append(' ')
-
-        informationToWrite = zip(anthroClass, timeStamps, whiteSpace, bioClass, timeStamps, whiteSpace, geoClass, timeStamps, whiteSpace, indices_index, indices_val, indices_desc)
-        
-        ### Output to CSV ###
-
-        # Output anthrophony csv file
         try:
-            with open(csv_file, 'w', newline = '') as fileToWrite:
-                informationWriter = csv.writer(fileToWrite)
-                informationWriter.writerow(topHeaders)
-                informationWriter.writerow(secondaryHeaders)
-                for row in informationToWrite:
-                    informationWriter.writerow(row)
-        except IOError:
-            print("I/O error in Anthrophony CSV Output")
+            print("-------------------------------------------\nFile: ", filename)
+            print("Starting CNN classification..")
+            class_data = classify_file( audiofile, all_models )
+            print("Completed CNN classification..")
 
-        if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
-        
-        print("Completed classification on file: ", filename)
+            anthro_output_dict = class_data[0]["data"]
+            geo_output_dict    = class_data[1]["data"]
+            bio_output_dict    = class_data[2]["data"]
+
+            print("Starting acoustic indices classification..")
+            indices_dict = getAcousticIndices(audiofile)
+            print("Completed acoustic indices classification..")
+            print("-------------------------------------------")
+            count = 0
+            whiteSpace=[]
+            timeStamps =[]
+            anthroClass = []
+            bioClass = []
+            geoClass = []
+            indices_index = []
+            indices_val = []
+            indices_desc = []
+
+            for item in anthro_output_dict:
+                anthroClass.append(item['category'])
+                timeStamps.append(count)
+                whiteSpace.append(' ')
+                count += 1
+
+            for item in bio_output_dict:
+                bioClass.append(item['category'])
+
+            for item in geo_output_dict:
+                geoClass.append(item['category'])
+
+            for item in indices_dict:
+                indices_index.append(item['index'])
+                indices_val.append(item['value'])
+                indices_desc.append(item['desc'])
+
+            if len(indices_index) > len(anthroClass):
+                for item in indices_dict:
+                    anthroClass.append(' ')
+                    bioClass.append(' ')
+                    geoClass.append(' ')
+                    timeStamps.append(' ')
+                    whiteSpace.append(' ')
+
+            else:
+                for item in range(0, len(anthro_output_dict) - len(indices_dict)):
+                    indices_index.append(' ')
+                    indices_val.append(' ')
+                    indices_desc.append(' ')
+
+            informationToWrite = zip(anthroClass, timeStamps, whiteSpace, bioClass, timeStamps, whiteSpace, geoClass, timeStamps, whiteSpace, indices_index, indices_val, indices_desc)
+            
+            ### Output to CSV ###
+            try:
+                with open(csv_file, 'w', newline = '') as fileToWrite:
+                    informationWriter = csv.writer(fileToWrite)
+                    informationWriter.writerow(topHeaders)
+                    informationWriter.writerow(secondaryHeaders)
+                    for row in informationToWrite:
+                        informationWriter.writerow(row)
+            except IOError:
+                print("I/O error in Anthrophony CSV Output")
+
+            if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
+            
+        except:
+            print("Error in File: ", filename, "\nSkipping File...")
     
     # Completed classification of all audio files
     print("\n[SUCCESS] All files have been successfuly classified. \nResults are located in: ", output_filepath)
