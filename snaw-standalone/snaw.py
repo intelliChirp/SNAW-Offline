@@ -1,5 +1,4 @@
 from scipy import signal
-from pyAudioAnalysis import audioSegmentation as aS
 from scipy import interpolate
 from scipy.signal import butter, lfilter, freqz
 from scipy.stats import itemfreq
@@ -17,6 +16,7 @@ import json
 import argparse
 import traceback
 import warnings
+
 
 #################### CONSTANTS ####################
 
@@ -51,9 +51,11 @@ GEO_CNN_MODEL = 'model\\geo\\geo_cnn_model.h5'
 #   2     | WARNING          | Filter out INFO & WARNING messages 
 #   3     | ERROR            | Filter out all messages
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 # Remove deprecation warnings
 warnings.filterwarnings("ignore")
-
 ####################################################
 
 class CommandLine:
@@ -103,6 +105,12 @@ def runStandalone(input_filepath, output_filepath):
     # Retrieve File(s) and run classifcation
     for filename in os.listdir(input_filepath):
         audiofile = input_filepath + '/' + filename
+
+        # Error handling for incorrect file format
+        if not audiofile.lower().endswith('.wav'):
+            print("\nFile: ", audiofile, " (Invalid File Format)")
+            print("Skipping File...")
+            continue
 
         if(os.path.isdir(output_filepath)):
             csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
