@@ -1,0 +1,62 @@
+Anthrophony Model:, , ,Biophony Model:, , ,Geophony Model:, , ,Acoustic Indices:
+CATEGORY,TIMESTAMP (sec), ,CATEGORY,TIMESTAMP (sec), ,CATEGORY,TIMESTAMP (sec), ,Index,Value,Description
+AVT,0, ,GWC,0, ,NO,0, ,SNR,0.7621,The decibel difference of the highest amplitude acoustic event and the background noise.
+AVT,1, ,NO,1, ,NO,1, ,Acoustic Activity,0.5689,Fraction of frames where the signal is >3dB above background. 
+NO,2, ,NO,2, ,BMA,2, ,Acoustic Activity Count,0.2714,The number of times acoustic activity events occurred. 
+AVT,3, ,GWG,3, ,NO,3, ,Acoustic Events Average Duration,0.2994,The mean length of acoustic activity events. 
+AVT,4, ,NO,4, ,BIN,4, ,Temporal Entropy,0.191,[Ht] Complex amplitude signal - tends towards 1 and is sensitive to consistent sound. 
+AVT,5, ,GWG,5, ,BIN,5, ,Spectral Entropy,0.2517,[Hs] or [Hf] complex frequency signal - tends towards 1 and is sensitive to consistent sound. 
+AVT,6, ,GWG,6, ,BIN,6, ,Acoustic Entropy,0.0481,[H] assessment of pure to random noise: [Hs] x [Ht]. 
+AVT,7, ,GRA,7, ,BIN,7, ,Anthrophony,0.9534,Anthrophony Desc
+NO,8, ,GWG,8, ,BIN,8, ,Biophony,0.0102,Biophony Desc
+AVT,9, ,GWG,9, ,BIN,9, ,Normalized Difference Soundscape Index,0.0106,ratio of human to biotic sound - values of 1 equate to no human sound. 
+AVT,10, ,GWC,10, ,BIN,10, ,Acoustic Complexity Index,0.8162,Heterogeneity in sound intensity - high values represent more dynamically changing sounds. 
+AVT,11, ,GWC,11, ,BMA,11, ,Shannon Index,0.1283,Entropy of frequency - noisy will tend towards 1. 
+AVT,12, ,GWC,12, ,BMA,12, ,Median Of Amplitude Envelope,0.2455,"Linearly related to number of animal vocalizations, part of acoustic richness. "
+AVT,13, ,GWC,13, ,BMA,13, ,Entropy Of Spectral Maxima,0.5699,Indicator of species richness. 
+AVT,14, ,GWC,14, ,BMA,14, ,Entropy Of Spectral Average,0.5254,Entropy Of Spectral Average Desc. 
+AVT,15, ,NO,15, ,BIN,15, ,Entropy Of Spectral Variance,0.1263,Indicator of species richness. 
+AVT,16, ,GWG,16, ,BIN,16, , , , 
+AVT,17, ,GWG,17, ,NO,17, , , , 
+AVT,18, ,GWG,18, ,BIN,18, , , , 
+NO,19, ,GRA,19, ,BIN,19, , , , 
+AVT,20, ,GWG,20, ,BIN,20, , , , 
+AVH,21, ,GWG,21, ,BIN,21, , , , 
+NO,22, ,GRA,22, ,BIN,22, , , , 
+NO,23, ,GWG,23, ,BIN,23, , , , 
+NO,24, ,GWG,24, ,BIN,24, , , , 
+AVT,25, ,GWG,25, ,BAM,25, , , , 
+AVT,26, ,NO,26, ,BIN,26, , , , 
+AVT,27, ,GRA,27, ,BIN,27, , , , 
+AVT,28, ,GWG,28, ,BIN,28, , , , 
+AVT,29, ,GWG,29, ,BIN,29, , , , 
+NO,30, ,GWG,30, ,BIN,30, , , , 
+NO,31, ,GRA,31, ,BIN,31, , , , 
+NO,32, ,GRA,32, ,BIN,32, , , , 
+NO,33, ,GRA,33, ,BIN,33, , , , 
+NO,34, ,GWG,34, ,BIN,34, , , , 
+AVT,35, ,GWG,35, ,BIN,35, , , , 
+NO,36, ,GRA,36, ,BIN,36, , , , 
+NO,37, ,GRA,37, ,BIN,37, , , , 
+NO,38, ,GWG,38, ,BIN,38, , , , 
+NO,39, ,GWG,39, ,BIN,39, , , , 
+NO,40, ,GRA,40, ,BIN,40, , , , 
+NO,41, ,GRA,41, ,BIN,41, , , , 
+NO,42, ,GWG,42, ,BIN,42, , , , 
+NO,43, ,GRA,43, ,BIN,43, , , , 
+NO,44, ,GRA,44, ,BIN,44, , , , 
+AVT,45, ,GRA,45, ,BIN,45, , , , 
+NO,46, ,GRA,46, ,BIN,46, , , , 
+NO,47, ,GRA,47, ,BIN,47, , , , 
+NO,48, ,GWG,48, ,BIN,48, , , , 
+NO,49, ,GRA,49, ,BIN,49, , , , 
+NO,50, ,GRA,50, ,BIN,50, , , , 
+NO,51, ,GRA,51, ,BIN,51, , , , 
+NO,52, ,GRA,52, ,BIN,52, , , , 
+NO,53, ,GWG,53, ,BIN,53, , , , 
+NO,54, ,GRA,54, ,BIN,54, , , , 
+NO,55, ,GRA,55, ,BIN,55, , , , 
+NO,56, ,GRA,56, ,BIN,56, , , , 
+NO,57, ,GRA,57, ,BIN,57, , , , 
+NO,58, ,GRA,58, ,BIN,58, , , , 
+NO,59, ,GRA,59, ,BIN,59, , , , 
