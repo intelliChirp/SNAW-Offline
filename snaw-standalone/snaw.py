@@ -15,6 +15,7 @@ import os
 import json
 import argparse
 import traceback
+import time
 
 
 ######################################################################
@@ -106,6 +107,7 @@ def runStandalone(input_filepath, output_filepath):
     # Initialize a file counter
     finalResult = {}
     fileCount = 0
+    errorFileCount = 0
 
     # Initilazing CSV column and header names
     csv_columns = ['category','time']
@@ -113,14 +115,22 @@ def runStandalone(input_filepath, output_filepath):
     topHeaders = ['Anthrophony Model:', ' ', ' ', 'Biophony Model:', ' ', ' ', 'Geophony Model:', ' ', ' ', 'Acoustic Indices:']
     secondaryHeaders = ['CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'CATEGORY', 'TIMESTAMP (sec)', ' ', 'Index', 'Value', 'Description']
 
+    print("-------------------------------------------")
+    
+    # start timer for total elapsed time calculation
+    timer_start = time.time()
+
     # Loop through file(s) and run CNN and acoustic indices classifcation
     for filename in os.listdir(input_filepath):
         audiofile = input_filepath + '/' + filename
+        fileCount += 1
         
         # Error handling for incorrect file format
         if not audiofile.lower().endswith('.wav'):
-            print("\nError in File: ", filename, " (Invalid File Format)")
-            print("Skipping File...")
+            print("File: ", filename)
+            print("Error: Invalid File Format")
+            print("Skipping File..\n-------------------------------------------")
+            errorFileCount += 1
             continue
 
         if(os.path.isdir(output_filepath)):
@@ -130,7 +140,7 @@ def runStandalone(input_filepath, output_filepath):
             csv_file = output_filepath + "/Classification_" + filename[:-4] + ".csv"
 
         try:
-            print("-------------------------------------------\nFile: ", filename)
+            print("File: ", filename)
             print("Starting CNN classification..")
             class_data = classify_file( audiofile, all_models )
             print("Completed CNN classification..")
@@ -194,16 +204,22 @@ def runStandalone(input_filepath, output_filepath):
                     informationWriter.writerow(secondaryHeaders)
                     for row in informationToWrite:
                         informationWriter.writerow(row)
-            except IOError:
-                print("I/O error in Anthrophony CSV Output")
+            except:
+                print("Error in exporting CSV..")
 
             if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
             
         except:
-            print("Error in File: ", filename, "\nSkipping File...")
+            print("Error during classification..\nSkipping File..\n-------------------------------------------")
+            errorFileCount += 1
     
-    # Completed classification of all audio files
-    print("\n[SUCCESS] All files have been successfuly classified. \nResults are located in: ", output_filepath)
+    # end timer for total time elapsed calculation
+    timer_end = time.time()
+
+    total_time_elapsed = timer_end - timer_start
+
+    # Completed classification of all audio files, show number of files and time elapsed
+    print("\nFinished classifying", fileCount, "file(s).\nErrors occured in", errorFileCount, "file(s).\nTime Elapsed: ", round(total_time_elapsed), "second(s)\nResults are located in: ", output_filepath)
 
 class AudioProcessing(object):
 
@@ -792,7 +808,6 @@ class AcousticIndices(object):
             else:
                 segments_stft = np.concatenate((segments_stft,stft[:,start:stop]),axis=1)
 
-
         average_spectra = np.mean(segments_stft,axis=1)
         var_spectra = np.var(segments_stft,axis =1)
 
@@ -1162,7 +1177,16 @@ def getAcousticIndices(audiofile):
 
         # extracting indices
         acousticIndices = AcousticIndices(data_chunk,new_fs)
-        acoustic_indices = acousticIndices.get_acoustic_indices()
+
+        global acoustic_indices
+        # empty acoustic indice list in case of exception
+        EMPTY_ACOUSTIC_INDICE_LIST = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+        try:
+            acoustic_indices = acousticIndices.get_acoustic_indices()
+        except:
+            print("Error while calculating acoustic indices..")
+            acoustic_indices = EMPTY_ACOUSTIC_INDICE_LIST
 
         acoustic_indices = list(map(lambda x: round(x, 4), acoustic_indices))
         if(PREDICTION_VERBOSE):
