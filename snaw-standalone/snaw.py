@@ -161,7 +161,6 @@ def runStandalone(input_filepath, output_filepath):
             # Acoustic Indice Calculations
             indices_dict = getAcousticIndices(audiofile)
             print("Completed acoustic indices classification..")
-            print("-------------------------------------------")
             
             count = 0
             whiteSpace=[]
@@ -218,9 +217,10 @@ def runStandalone(input_filepath, output_filepath):
                 print("Error in exporting CSV..")
 
             if DISPLAY_ALL_STEPS: print("[SUCCESS] Wrote indices classification results to .csv file")
+            print("-------------------------------------------")
             
         except:
-            print("Error during classification..\nSkipping File..\n-------------------------------------------")
+            print("Error during classification..\n-------------------------------------------")
             errorFileCount += 1
     
     # end timer for total time elapsed calculation
@@ -1171,19 +1171,17 @@ def getAcousticIndices(audiofile):
         # changing sampling rate
         new_fs = 17640
         data_chunk = AudioProcessing.resample(data,fs,new_fs)
+        
+        global acoustic_indices
+
+        # empty acoustic indice list in case of exception
+        EMPTY_ACOUSTIC_INDICE_LIST = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
 
         # extracting indices
         acousticIndices = AcousticIndices(data_chunk,new_fs)
 
-        global acoustic_indices
-        # empty acoustic indice list in case of exception
-        EMPTY_ACOUSTIC_INDICE_LIST = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-
-        try:
-            acoustic_indices = acousticIndices.get_acoustic_indices()
-        except:
-            print("Error while calculating acoustic indices..")
-            acoustic_indices = EMPTY_ACOUSTIC_INDICE_LIST
+        acoustic_indices = acousticIndices.get_acoustic_indices()
+        acoustic_indices = EMPTY_ACOUSTIC_INDICE_LIST
 
         acoustic_indices = list(map(lambda x: round(x, 4), acoustic_indices))
         if(PREDICTION_VERBOSE):
@@ -1202,9 +1200,9 @@ def getAcousticIndices(audiofile):
 
             # append result dictionary to the final results array
             if( DISPLAY_ALL_STEPS ): print("[WORKING] Calculated " + acoustic_headers[i])
-    except Exception as e:
+    except:
         track = traceback.format_exc()
-        print(track)
+        print("Error encountered..")
         singleResultArray = "ERROR_PRESENT"
 
 
