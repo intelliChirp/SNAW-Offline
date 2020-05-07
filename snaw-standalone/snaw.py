@@ -230,7 +230,7 @@ def runStandalone(input_filepath, output_filepath):
     total_time_elapsed = timer_end - timer_start
 
     # Completed classification of all audio files, show number of files and time elapsed
-    print("\nFinished classifying", fileCount, "file(s).\nErrors occured in", errorFileCount, "file(s).\nTime Elapsed: ", round(total_time_elapsed), "second(s)\nResults are located in: ", output_filepath)
+    print("\nFinished classifying", fileCount, "file(s).\nErrors occured in", errorFileCount, "file(s).\nTime Elapsed: ", round(total_time_elapsed), "second(s)\nResults are located in: ", output_filepath, "\n")
 
 # Classify files with CNNs
 def classify_file(audio_file, all_models) :
@@ -1179,9 +1179,11 @@ def getAcousticIndices(audiofile):
 
         # extracting indices
         acousticIndices = AcousticIndices(data_chunk,new_fs)
-
-        acoustic_indices = acousticIndices.get_acoustic_indices()
-        acoustic_indices = EMPTY_ACOUSTIC_INDICE_LIST
+        try:
+            acoustic_indices = acousticIndices.get_acoustic_indices()
+        except:
+            acoustic_indices = EMPTY_ACOUSTIC_INDICE_LIST
+            print("Error occured in acoustic indice classification..\nSetting acoustic indice values to 0..")
 
         acoustic_indices = list(map(lambda x: round(x, 4), acoustic_indices))
         if(PREDICTION_VERBOSE):
