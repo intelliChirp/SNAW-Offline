@@ -25,7 +25,7 @@ https://www.python.org/downloads/release/python-374/2.
 
 Make sure Pip is up-to-date. Run command: 
 ~~~~
-py -m pip install --upgrade pip3
+py -m pip install --upgrade pip
 ~~~~
 
 Navigate to the directory where you would like to install the virtual environment. Run command:
@@ -74,6 +74,13 @@ After the application completes, your results will be located in the ‘output�
 Note: The directories do not need to be named ‘audio’ and ‘output’. That is only there by default for convenience. You can create folders with any name, and then use the command format 
 ~~~~
 py snaw.py -i [AUDIO-DIRECTORY] -o [OUTPUT-DIRECTORY]
+~~~~
+
+[Windows Command Prompt Users] If you would like to export the output of the application in a text file, add ‘| tee file-name.txt’ to the end of your command. Once the application finishes running, the text file will appear.
+Note: Save this file elsewhere once the classification completes. If you run the application again with the same text file name, the file will be overwritten by the new classification.
+Example: 
+~~~~
+py snaw.py -i audio -o output | tee output.txt
 ~~~~
 
 ## Authors
